@@ -23,6 +23,8 @@ func main() {
 	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 5}, chronofold.Symbol{'o'}})
 	cf.Insert(chronofold.Op{cf.Timestamp(1), chronofold.Timestamp{"b", 6}, chronofold.Tombstone{}}) // Delete h
 	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 7}, chronofold.Symbol{'H'}})
+
+	fmt.Println(cf.String()) // Prints "Hello"
 }
 ```
 
