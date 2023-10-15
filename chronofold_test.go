@@ -1,6 +1,7 @@
 package chronofold_test
 
 import (
+	"math/rand"
 	"testing"
 
 	c "github.com/jpoz/chronofold"
@@ -117,4 +118,41 @@ func TestChronoFold_PaperExample(t *testing.T) {
 	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 14}, c.Symbol{'k'}})
 
 	assert.Equal(t, "Minsk", cf.String()) // ɑ6β8y14
+}
+
+func BenchmarkGoString(b *testing.B) {
+	s := "Hello"
+	for i := 0; i < b.N; i++ {
+		s = s + "x"
+	}
+}
+
+func BenchmarkGoRune(b *testing.B) {
+	s := []rune("Hello")
+	for i := 0; i < b.N; i++ {
+		s = append(s, 'x')
+	}
+}
+
+func BenchmarkChronoFoldInsert(b *testing.B) {
+	cf := c.FromString("Hello", "a")
+	for i := 0; i < b.N; i++ {
+		cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", i}, c.Symbol{'x'}})
+	}
+}
+
+func BenchmarkGoRuneSplit(b *testing.B) {
+	s := []rune("Hello")
+	for i := 0; i < b.N; i++ {
+		index := rand.Intn(len(s))
+		s = append(s[:index+1], s[index:]...)
+	}
+}
+
+func BenchmarkChronoFoldInsertSplit(b *testing.B) {
+	cf := c.FromString("Hello", "a")
+	for i := 0; i < b.N; i++ {
+		index := rand.Intn(len(cf.Log))
+		cf.Insert(c.Op{cf.Timestamp(index), c.Timestamp{"b", i}, c.Symbol{'x'}})
+	}
 }
