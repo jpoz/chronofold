@@ -15,7 +15,7 @@ type ChronoFold struct {
 	currentTime int
 }
 
-func Empty(author string) *ChronoFold {
+func Empty() *ChronoFold {
 	return &ChronoFold{
 		Log: []*Node{
 			{

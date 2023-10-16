@@ -14,31 +14,39 @@ import (
 )
 
 func main() {
-	cf := chronofold.FromString("", "a")
+	cf := chronofold.Empty()
 
-	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 1}, chronofold.Symbol{'h'}})
-	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 2}, chronofold.Symbol{'e'}})
-	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 3}, chronofold.Symbol{'l'}})
-	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 4}, chronofold.Symbol{'l'}})
-	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 5}, chronofold.Symbol{'o'}})
-	cf.Insert(chronofold.Op{cf.Timestamp(1), chronofold.Timestamp{"b", 6}, chronofold.Tombstone{}}) // Delete h
-	cf.Insert(chronofold.Op{cf.Last(), chronofold.Timestamp{"b", 7}, chronofold.Symbol{'H'}})
+	ct := chronofold.NewCT(
+		&chronofold.Op{chronofold.Timestamp{"a", 0}, chronofold.Timestamp{"a", 0}, chronofold.Root{}},
+	)
+
+	for i, r := range "Hello" {
+		op := &chronofold.Op{chronofold.Timestamp{"a", i + 1}, chronofold.Timestamp{"a", i}, chronofold.Symbol{r}}
+		ct.Add(op)
+		cf.Add(op, ct)
+	}
 
 	fmt.Println(cf.String()) // Prints "Hello"
 }
 ```
 
-The underlying data structure looks like:
+The underlying data structures looks like:
 
 ```
 ChronoFold{
-        Node{Timestamp:{a, 0}, Value: ∅, Next: Index(1)},
-        Node{Timestamp:{b, 1}, Value: h, Next: Index(6)},
-        Node{Timestamp:{b, 2}, Value: e, Next: Index(3)},
-        Node{Timestamp:{b, 3}, Value: l, Next: Index(4)},
-        Node{Timestamp:{b, 4}, Value: l, Next: Index(5)},
-        Node{Timestamp:{b, 5}, Value: o, Next: End},
-        Node{Timestamp:{b, 6}, Value: ⌫, Next: Index(7)},
-        Node{Timestamp:{b, 7}, Value: H, Next: Index(2)},
+        Node{Value: ∅, Next: +1},
+        Node{Value: H, Next: +1},
+        Node{Value: e, Next: +1},
+        Node{Value: l, Next: +1},
+        Node{Value: l, Next: +1},
+        Node{Value: o, Next: End},
+}
+CausalTree{
+        Op{Timestamp: a(0), Ref: a(0), Value: ∅},
+        Op{Timestamp: a(1), Ref: a(0), Value: H},
+        Op{Timestamp: a(2), Ref: a(1), Value: e},
+        Op{Timestamp: a(3), Ref: a(2), Value: l},
+        Op{Timestamp: a(4), Ref: a(3), Value: l},
+        Op{Timestamp: a(5), Ref: a(4), Value: o},
 }
 ```
