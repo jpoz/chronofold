@@ -5,21 +5,9 @@ import (
 	"strings"
 )
 
-type Timestamp struct {
-	Author    string
-	AuthorIdx int
-}
-
 type Node struct {
-	Timestamp Timestamp
-	Value     Value
-	Next      Next
-}
-
-type Op struct {
-	Target    Timestamp
-	Timestamp Timestamp
-	Value     Value
+	Value Value
+	Next  Next
 }
 
 type ChronoFold struct {
@@ -31,10 +19,6 @@ func Empty(author string) *ChronoFold {
 	return &ChronoFold{
 		Log: []*Node{
 			{
-				Timestamp: Timestamp{
-					Author:    author,
-					AuthorIdx: 0,
-				},
 				Value: Root{},
 				Next:  End{},
 			},
@@ -52,48 +36,47 @@ func FromString(text, author string) *ChronoFold {
 	strlen := len(text)
 	nodes := make([]*Node, strlen+1)
 	nodes[0] = &Node{
-		Timestamp: Timestamp{author, 0},
-		Value:     Root{},
-		Next:      incrementOrEnd(0, strlen),
+		Value: Root{},
+		Next:  incrementOrEnd(0, strlen),
 	}
 
 	for i, rune := range text {
 		nodes[i+1] = &Node{
-			Timestamp: Timestamp{author, int(i + 1)},
-			Value:     Symbol{rune},
-			Next:      incrementOrEnd(i+1, strlen),
+			Value: Symbol{rune},
+			Next:  incrementOrEnd(i+1, strlen),
 		}
 	}
 
 	return &ChronoFold{Log: nodes}
 }
 
-func (c *ChronoFold) Timestamp(idx int) Timestamp {
-	return c.Log[idx].Timestamp
-}
-
-func (c *ChronoFold) Last() Timestamp {
-	return c.Log[len(c.Log)-1].Timestamp
-}
-
-func (c *ChronoFold) Insert(op Op) error {
-	j, prevNode := c.ndx(op.Target)
-	if prevNode == nil {
+func (c *ChronoFold) Add(op *Op, ct *CausalTree) error {
+	ref := op.Ref
+	j, prevOp := ct.Ndx(ref)
+	if prevOp == nil {
 		return fmt.Errorf("invalid timestamp")
 	}
+	if ref.AuthorIdx > op.Timestamp.AuthorIdx {
+		return fmt.Errorf("invalid ref (ref.AuthorIdx > op.Timestamp.AuthorIdx)")
+	}
+	if ref.AuthorIdx > j {
+		return fmt.Errorf("invalid ref (ref.AuthorIdx > Reference index)")
+	}
+	if j >= len(c.Log) {
+		return fmt.Errorf("invalid ref (j >= len(c.Log))")
+	}
 
+	prevNode := c.Log[j]
 	addedIndex := len(c.Log)
 	next := calculateNext(j, prevNode.Next, addedIndex)
 
 	newNode := Node{
-		Timestamp: op.Timestamp,
-		Value:     op.Value,
-		Next:      next,
+		Value: op.Value,
+		Next:  next,
 	}
 	c.Log = append(c.Log, &newNode)
 
-	prevNode.Next = Index{Idx: addedIndex}
-	c.Log[j] = prevNode
+	prevNode.Next = normalizeNext(j, addedIndex)
 
 	return nil
 }
@@ -115,9 +98,7 @@ func (c *ChronoFold) Inspect() string {
 	for _, n := range c.Log {
 		builder.WriteString(
 			fmt.Sprintf(
-				"\tNode{Timestamp:{%s, %d}, Value: %s, Next: %s},\n",
-				n.Timestamp.Author,
-				n.Timestamp.AuthorIdx,
+				"\tNode{Value: %s, Next: %s},\n",
 				n.Value.String(),
 				n.Next.String(),
 			),
@@ -156,16 +137,6 @@ Loop:
 	}
 
 	return nil
-}
-
-func (c *ChronoFold) ndx(t Timestamp) (int, *Node) {
-	for i, n := range c.Log {
-		if n.Timestamp == t {
-			return int(i), n
-		}
-	}
-
-	return 0, nil // idk what todo here
 }
 
 func calculateNext(prevIdx int, prevNext Next, sourceIndex int) Next {

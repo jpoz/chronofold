@@ -1,6 +1,7 @@
 package chronofold_test
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -16,12 +17,12 @@ func TestChronoFold_empty(t *testing.T) {
 
 func TestChronoFold_hello(t *testing.T) {
 	cf := c.New(
-		&c.Node{Timestamp: c.Timestamp{"a", 0}, Value: c.Root{}, Next: c.Increment{}},
-		&c.Node{Timestamp: c.Timestamp{"a", 1}, Value: c.Symbol{'H'}, Next: c.Increment{}},
-		&c.Node{Timestamp: c.Timestamp{"a", 2}, Value: c.Symbol{'E'}, Next: c.Increment{}},
-		&c.Node{Timestamp: c.Timestamp{"a", 3}, Value: c.Symbol{'L'}, Next: c.Increment{}},
-		&c.Node{Timestamp: c.Timestamp{"a", 4}, Value: c.Symbol{'L'}, Next: c.Increment{}},
-		&c.Node{Timestamp: c.Timestamp{"a", 5}, Value: c.Symbol{'O'}, Next: c.End{}},
+		&c.Node{Value: c.Root{}, Next: c.Increment{}},
+		&c.Node{Value: c.Symbol{'H'}, Next: c.Increment{}},
+		&c.Node{Value: c.Symbol{'E'}, Next: c.Increment{}},
+		&c.Node{Value: c.Symbol{'L'}, Next: c.Increment{}},
+		&c.Node{Value: c.Symbol{'L'}, Next: c.Increment{}},
+		&c.Node{Value: c.Symbol{'O'}, Next: c.End{}},
 	)
 	assert.NotNil(t, cf)
 	assert.Equal(t, cf.String(), "HELLO")
@@ -48,100 +49,153 @@ func TestChronoFold_NewChronologFromString(t *testing.T) {
 	assert.Equal(t, cf.String(), "Hello how are you?")
 }
 
-func TestChronoFold_Insert(t *testing.T) {
+func TestChronoFold_Add(t *testing.T) {
 	cf := c.FromString("Hello", "a")
+	ct := c.NewCT(
+		&c.Op{c.Timestamp{"a", 0}, c.Timestamp{"a", 0}, c.Root{}},
+		&c.Op{c.Timestamp{"a", 1}, c.Timestamp{"a", 0}, c.Symbol{'H'}},
+		&c.Op{c.Timestamp{"a", 2}, c.Timestamp{"a", 1}, c.Symbol{'e'}},
+		&c.Op{c.Timestamp{"a", 3}, c.Timestamp{"a", 2}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 4}, c.Timestamp{"a", 3}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 5}, c.Timestamp{"a", 4}, c.Symbol{'o'}},
+	)
 
-	ts := cf.Timestamp(5)
-
-	cf.Insert(c.Op{
-		Target:    ts,
-		Timestamp: c.Timestamp{"b", 5},
+	op := &c.Op{
+		Timestamp: c.Timestamp{"b", 6},
+		Ref:       c.Timestamp{"a", 5},
 		Value:     c.Tombstone{},
-	})
+	}
+
+	ct.Add(op)
+	err := cf.Add(op, ct)
+	assert.NoError(t, err)
 
 	assert.Equal(t, "Hell", cf.String())
 }
 
-func TestChronoFold_ManyInserts(t *testing.T) {
+func TestChronoFold_ManyAdds(t *testing.T) {
 	cf := c.FromString("Hello", "a")
+	ct := c.NewCT(
+		&c.Op{c.Timestamp{"a", 0}, c.Timestamp{"a", 0}, c.Root{}},
+		&c.Op{c.Timestamp{"a", 1}, c.Timestamp{"a", 0}, c.Symbol{'H'}},
+		&c.Op{c.Timestamp{"a", 2}, c.Timestamp{"a", 1}, c.Symbol{'e'}},
+		&c.Op{c.Timestamp{"a", 3}, c.Timestamp{"a", 2}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 4}, c.Timestamp{"a", 3}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 5}, c.Timestamp{"a", 4}, c.Symbol{'o'}},
+	)
 
-	start := 5
-	for i, rune := range " how are you?" {
-		target := cf.Timestamp(len(cf.Log) - 1)
-		cf.Insert(
-			c.Op{
-				Target:    target,
-				Timestamp: c.Timestamp{"b", start + i},
-				Value:     c.Symbol{rune},
-			},
-		)
+	op := &c.Op{
+		Timestamp: c.Timestamp{"b", 6},
+		Ref:       c.Timestamp{"a", 5},
+		Value:     c.Symbol{' '},
+	}
+	ct.Add(op)
+	err := cf.Add(op, ct)
+	assert.NoError(t, err)
+
+	start := 6
+	for i, rune := range "how are you?" {
+		op := &c.Op{
+			Timestamp: c.Timestamp{"b", start + i + 1},
+			Ref:       c.Timestamp{"b", start + i},
+			Value:     c.Symbol{rune},
+		}
+
+		ct.Add(op)
+		err := cf.Add(op, ct)
+		assert.NoError(t, err)
 	}
 
 	assert.Equal(t, "Hello how are you?", cf.String())
 }
 
 func TestChronoFold_PaperExample(t *testing.T) {
-	cf := c.FromString("PINSK", "a") // ɑ6
+	base := func() (*c.ChronoFold, *c.CausalTree) {
+		cf := c.FromString("PINSK", "a") // ɑ6
+		ct := c.NewCT(
+			&c.Op{c.Timestamp{"a", 0}, c.Timestamp{"a", 0}, c.Root{}},
+			&c.Op{c.Timestamp{"a", 1}, c.Timestamp{"a", 0}, c.Symbol{'P'}},
+			&c.Op{c.Timestamp{"a", 2}, c.Timestamp{"a", 1}, c.Symbol{'I'}},
+			&c.Op{c.Timestamp{"a", 3}, c.Timestamp{"a", 2}, c.Symbol{'N'}},
+			&c.Op{c.Timestamp{"a", 4}, c.Timestamp{"a", 3}, c.Symbol{'S'}},
+			&c.Op{c.Timestamp{"a", 5}, c.Timestamp{"a", 4}, c.Symbol{'K'}},
+		)
+		return cf, ct
+	}
 
-	cf.Insert(c.Op{cf.Timestamp(1), c.Timestamp{"b", 7}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 8}, c.Symbol{'M'}})
+	addOp := func(cf *c.ChronoFold, ct *c.CausalTree, op *c.Op) {
+		ct.Add(op)
+		err := cf.Add(op, ct)
+		assert.NoError(t, err)
+	}
 
+	cf, ct := base()
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 6}, Ref: c.Timestamp{"a", 1}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 7}, Ref: c.Timestamp{"b", 6}, Value: c.Symbol{'M'}})
 	assert.Equal(t, "MINSK", cf.String()) // ɑ6β8
 
-	cf = c.FromString("PINSK", "a")
-	cf.Insert(c.Op{cf.Timestamp(2), c.Timestamp{"b", 7}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Timestamp(3), c.Timestamp{"b", 8}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Timestamp(4), c.Timestamp{"b", 8}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Timestamp(5), c.Timestamp{"b", 10}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 11}, c.Symbol{'i'}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 12}, c.Symbol{'n'}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 13}, c.Symbol{'s'}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 14}, c.Symbol{'k'}})
-
+	cf, ct = base()
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 6}, Ref: c.Timestamp{"a", 5}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 7}, Ref: c.Timestamp{"a", 4}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 8}, Ref: c.Timestamp{"a", 3}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 9}, Ref: c.Timestamp{"a", 2}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 10}, Ref: c.Timestamp{"a", 1}, Value: c.Symbol{'i'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 11}, Ref: c.Timestamp{"b", 10}, Value: c.Symbol{'n'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 12}, Ref: c.Timestamp{"b", 11}, Value: c.Symbol{'s'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 13}, Ref: c.Timestamp{"b", 12}, Value: c.Symbol{'k'}})
 	assert.Equal(t, "Pinsk", cf.String()) // ɑ6y14
 
-	cf.Insert(c.Op{cf.Timestamp(1), c.Timestamp{"b", 7}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 8}, c.Symbol{'M'}})
-
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 6}, Ref: c.Timestamp{"a", 1}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 7}, Ref: c.Timestamp{"c", 6}, Value: c.Symbol{'M'}})
 	assert.Equal(t, "Minsk", cf.String()) // ɑ6y14β8
 
-	cf = c.FromString("PINSK", "a")
-	cf.Insert(c.Op{cf.Timestamp(1), c.Timestamp{"b", 7}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 8}, c.Symbol{'M'}})
-	cf.Insert(c.Op{cf.Timestamp(2), c.Timestamp{"b", 7}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Timestamp(3), c.Timestamp{"b", 8}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Timestamp(4), c.Timestamp{"b", 8}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Timestamp(5), c.Timestamp{"b", 10}, c.Tombstone{}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 11}, c.Symbol{'i'}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 12}, c.Symbol{'n'}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 13}, c.Symbol{'s'}})
-	cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", 14}, c.Symbol{'k'}})
-
+	cf, ct = base()
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 6}, Ref: c.Timestamp{"a", 1}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"b", 7}, Ref: c.Timestamp{"b", 6}, Value: c.Symbol{'M'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 6}, Ref: c.Timestamp{"a", 5}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 7}, Ref: c.Timestamp{"c", 6}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 8}, Ref: c.Timestamp{"c", 7}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 9}, Ref: c.Timestamp{"c", 8}, Value: c.Tombstone{}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 10}, Ref: c.Timestamp{"c", 9}, Value: c.Symbol{'i'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 11}, Ref: c.Timestamp{"c", 10}, Value: c.Symbol{'n'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 12}, Ref: c.Timestamp{"c", 11}, Value: c.Symbol{'s'}})
+	addOp(cf, ct, &c.Op{Timestamp: c.Timestamp{"c", 13}, Ref: c.Timestamp{"c", 12}, Value: c.Symbol{'k'}})
 	assert.Equal(t, "Minsk", cf.String()) // ɑ6β8y14
+	fmt.Println(cf.Inspect())
+	fmt.Println(ct.Inspect())
 }
 
-func BenchmarkGoString(b *testing.B) {
-	s := "Hello"
-	for i := 0; i < b.N; i++ {
-		s = s + "x"
-	}
-}
-
-func BenchmarkGoRune(b *testing.B) {
+func BenchmarkGoRuneAppend(b *testing.B) {
 	s := []rune("Hello")
 	for i := 0; i < b.N; i++ {
-		s = append(s, 'x')
+		s = append(s, 'o')
 	}
 }
 
-func BenchmarkChronoFoldInsert(b *testing.B) {
-	cf := c.FromString("Hello", "a")
+func BenchmarkChronoFoldAppend(b *testing.B) {
+	cf := c.FromString("Hello", "a") // ɑ6
+	ct := c.NewCT(
+		&c.Op{c.Timestamp{"a", 0}, c.Timestamp{"a", 0}, c.Root{}},
+		&c.Op{c.Timestamp{"a", 1}, c.Timestamp{"a", 0}, c.Symbol{'H'}},
+		&c.Op{c.Timestamp{"a", 2}, c.Timestamp{"a", 1}, c.Symbol{'e'}},
+		&c.Op{c.Timestamp{"a", 3}, c.Timestamp{"a", 2}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 4}, c.Timestamp{"a", 3}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 5}, c.Timestamp{"a", 4}, c.Symbol{'0'}},
+	)
+	start := 5
 	for i := 0; i < b.N; i++ {
-		cf.Insert(c.Op{cf.Last(), c.Timestamp{"b", i}, c.Symbol{'x'}})
+		op := &c.Op{
+			c.Timestamp{"a", start + i + 1},
+			c.Timestamp{"a", start + i},
+			c.Symbol{'r'},
+		}
+		ct.Add(op)
+		err := cf.Add(op, ct)
+		assert.NoError(b, err)
 	}
 }
 
-func BenchmarkGoRuneSplit(b *testing.B) {
+func BenchmarkGoRuneInsert(b *testing.B) {
 	s := []rune("Hello")
 	for i := 0; i < b.N; i++ {
 		index := rand.Intn(len(s))
@@ -149,10 +203,25 @@ func BenchmarkGoRuneSplit(b *testing.B) {
 	}
 }
 
-func BenchmarkChronoFoldInsertSplit(b *testing.B) {
-	cf := c.FromString("Hello", "a")
+func BenchmarkChronoFoldInsert(b *testing.B) {
+	cf := c.FromString("Hello", "a") // ɑ6
+	ct := c.NewCT(
+		&c.Op{c.Timestamp{"a", 0}, c.Timestamp{"a", 0}, c.Root{}},
+		&c.Op{c.Timestamp{"a", 1}, c.Timestamp{"a", 0}, c.Symbol{'H'}},
+		&c.Op{c.Timestamp{"a", 2}, c.Timestamp{"a", 1}, c.Symbol{'e'}},
+		&c.Op{c.Timestamp{"a", 3}, c.Timestamp{"a", 2}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 4}, c.Timestamp{"a", 3}, c.Symbol{'l'}},
+		&c.Op{c.Timestamp{"a", 5}, c.Timestamp{"a", 4}, c.Symbol{'0'}},
+	)
+	start := 5
 	for i := 0; i < b.N; i++ {
 		index := rand.Intn(len(cf.Log))
-		cf.Insert(c.Op{cf.Timestamp(index), c.Timestamp{"b", i}, c.Symbol{'x'}})
+		op := &c.Op{
+			c.Timestamp{"a", index},
+			c.Timestamp{"a", start + i},
+			c.Symbol{'r'},
+		}
+		ct.Add(op)
+		cf.Add(op, ct)
 	}
 }
