@@ -10,7 +10,7 @@ import (
 )
 
 func TestChronoFold_empty(t *testing.T) {
-	cf := c.Empty("a")
+	cf := c.Empty()
 	assert.NotNil(t, cf)
 	assert.Equal(t, cf.String(), "")
 }

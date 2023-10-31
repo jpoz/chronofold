@@ -6,8 +6,9 @@ import (
 )
 
 type Node struct {
-	Value Value
-	Next  Next
+	Value     Value
+	Next      Next
+	Timestamp Timestamp
 }
 
 type ChronoFold struct {
@@ -21,6 +22,10 @@ func Empty() *ChronoFold {
 			{
 				Value: Root{},
 				Next:  End{},
+				Timestamp: Timestamp{
+					Author: "root",
+					AuthorIdx:    0,
+				},
 			},
 		},
 	}
@@ -71,8 +76,9 @@ func (c *ChronoFold) Add(op *Op, ct *CausalTree) error {
 	next := calculateNext(j, prevNode.Next, addedIndex)
 
 	newNode := Node{
-		Value: op.Value,
-		Next:  next,
+		Value:     op.Value,
+		Next:      next,
+		Timestamp: op.Timestamp,
 	}
 	c.Log = append(c.Log, &newNode)
 
@@ -85,11 +91,59 @@ func (c *ChronoFold) String() string {
 	result := []rune{}
 
 	c.iterateByNext(
-		func(r rune, idx int) { result = append(result, r) },
-		func() { result = result[:len(result)-1] },
+		func(_ Timestamp) {},
+		func(r rune, _ int, _ Timestamp) { result = append(result, r) },
+		func(_ Timestamp) { result = result[:len(result)-1] },
 	)
 
 	return string(result)
+}
+
+func (c *ChronoFold) TimestampAt(tidx int) Timestamp {
+	idx := 0
+	var result Timestamp
+
+	c.iterateByNext(
+		func(t Timestamp) {
+			if idx == tidx {
+				result = t
+			}
+			idx++
+		},
+		func(r rune, _ int, t Timestamp) {
+			if idx == tidx {
+				result = t
+			}
+			idx++
+		},
+		func(_ Timestamp) {
+			idx--
+		},
+	)
+
+	return result
+}
+
+func (c *ChronoFold) ValueByTimestamp(tt Timestamp) Value {
+	var result Value
+
+	c.iterateByNext(
+		func(t Timestamp) {
+			if t == tt {
+				result = Root{}
+			}
+		},
+		func(r rune, _ int, t Timestamp) {
+			if t == tt {
+				result = Symbol{r}
+			}
+		},
+		func(t Timestamp) {
+			result = Tombstone{}
+		},
+	)
+
+	return result
 }
 
 func (c *ChronoFold) Inspect() string {
@@ -98,9 +152,10 @@ func (c *ChronoFold) Inspect() string {
 	for _, n := range c.Log {
 		builder.WriteString(
 			fmt.Sprintf(
-				"\tNode{Value: %s, Next: %s},\n",
+				"\tNode{Value: %s, Next: %s, Timestamp: %s},\n",
 				n.Value.String(),
 				n.Next.String(),
+				n.Timestamp.String(),
 			),
 		)
 	}
@@ -109,8 +164,9 @@ func (c *ChronoFold) Inspect() string {
 }
 
 func (c *ChronoFold) iterateByNext(
-	onSymbol func(rune, int),
-	onTombstone func(),
+	onRoot func(Timestamp),
+	onSymbol func(rune, int, Timestamp),
+	onTombstone func(Timestamp),
 ) error {
 	logIdx := int(0)
 
@@ -119,11 +175,11 @@ Loop:
 		n := c.Log[logIdx]
 		switch v := n.Value.(type) {
 		case Root:
-			// Do nothing
+			onRoot(n.Timestamp)
 		case Symbol:
-			onSymbol(v.Char, logIdx)
+			onSymbol(v.Char, logIdx, n.Timestamp)
 		case Tombstone:
-			onTombstone()
+			onTombstone(n.Timestamp)
 		}
 		next := n.Next
 		switch next.(type) {
